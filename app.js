@@ -587,6 +587,11 @@ function geminiErrorMessage(status, body) {
       return 'このモデルはそのキーの無料枠で使えません。設定から gemini-2.5-flash-image に変えて試してください。'
         + `（Google: ${firstLine(apiMsg)}）`;
     }
+    if (/are blocked|API_KEY_API_BLOCKED/i.test(apiMsg + reasons)) {
+      return 'APIキーの「API へのアクセス制限」に Generative Language API が含まれていないようです。'
+        + 'Cloud Console（認証情報）で該当APIを追加するか、AI Studio で新しいキーを作り直してください。'
+        + `（Google: ${firstLine(apiMsg)}）`;
+    }
     return `AIを呼び出せませんでした（403）。設定のキー・モデルを確認してください。（Google: ${firstLine(apiMsg)}）`;
   }
   if (status === 429) {
