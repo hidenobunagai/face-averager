@@ -553,17 +553,47 @@ function flattenResultToBase64(canvas) {
   return c.toDataURL('image/png').split(',')[1];
 }
 
+function firstLine(s, max = 220) {
+  return String(s).split('\n')[0].slice(0, max);
+}
+
 function geminiErrorMessage(status, body) {
-  if (status === 400 && body.includes('API key not valid')) {
+  // Google の実際のエラー理由を切り出せるようにする（キー値は表示しない）
+  let apiMsg = '';
+  let reasons = '';
+  try {
+    const parsed = JSON.parse(body);
+    apiMsg = (parsed.error && parsed.error.message) || '';
+    reasons = ((parsed.error && parsed.error.details) || [])
+      .map(d => d.reason || '').filter(Boolean).join(',');
+  } catch (_) {
+    apiMsg = firstLine(body, 200);
+  }
+  console.warn('[FaceMix AI] Gemini API error:', status, apiMsg, reasons);
+
+  if (status === 400 && /API key not valid|API_KEY_INVALID/i.test(apiMsg)) {
     return 'APIキーが無効です。設定欄のキーを確認してください。';
   }
   if (status === 403) {
-    return 'このモデルをそのAPIキーでは使えない可能性があります。設定からモデル（例: gemini-2.5-flash-image）を変えて試してください。';
+    if (/has not been used in project|disabled|SERVICE_DISABLED/i.test(apiMsg + reasons)) {
+      return 'APIキーのプロジェクトで Generative Language API が無効のようです。AI Studio (aistudio.google.com/apikey) で新しいキーを作り直してください。'
+        + `（Google: ${firstLine(apiMsg)}）`;
+    }
+    if (/REFERRER|referrer/i.test(apiMsg + reasons)) {
+      return 'APIキーにリファラ制限が付いています。設定を解除するか facemix.misato-labs.com を許可してください。'
+        + `（Google: ${firstLine(apiMsg)}）`;
+    }
+    if (/free tier|tier/i.test(apiMsg)) {
+      return 'このモデルはそのキーの無料枠で使えません。設定から gemini-2.5-flash-image に変えて試してください。'
+        + `（Google: ${firstLine(apiMsg)}）`;
+    }
+    return `AIを呼び出せませんでした（403）。設定のキー・モデルを確認してください。（Google: ${firstLine(apiMsg)}）`;
   }
   if (status === 429) {
-    return 'レート制限または無料枠の上限に達しました。少し待ってから再試行するか、モデルを変えて試してください。';
+    return 'レート制限または無料枠の上限に達しました。少し待ってから再試行するか、モデルを変えて試してください。'
+      + (apiMsg ? `（Google: ${firstLine(apiMsg, 120)}）` : '');
   }
-  return `AI仕上げに失敗しました（HTTP ${status}）。しばらくして再試行してください。`;
+  return `AI仕上げに失敗しました（HTTP ${status}）。` + (apiMsg ? `（Google: ${firstLine(apiMsg)}）` : '');
 }
 
 async function callGeminiImage(key, model, imageBase64) {
