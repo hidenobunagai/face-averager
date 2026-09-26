@@ -183,6 +183,9 @@ function warpImage(srcCanvas, srcLandmarks, dstLandmarks, triangles) {
   canvas.height = WORK_SIZE;
   const ctx = canvas.getContext('2d');
 
+  let drawnCount = 0;
+  let skipCount = 0;
+
   for (let t = 0; t < triangles.length; t += 3) {
     const i0 = triangles[t];
     const i1 = triangles[t + 1];
@@ -213,33 +216,46 @@ function warpImage(srcCanvas, srcLandmarks, dstLandmarks, triangles) {
     ctx.clip();
 
     // ソースからデスティネーションへのアフィン変換行列
-    const det = p0s.x * (p1s.y - p2s.y) + p1s.x * (p2s.y - p0s.y) + p2s.x * (p0s.y - p1s.y);
+    const u0 = p0s.x, v0 = p0s.y;
+    const u1 = p1s.x, v1 = p1s.y;
+    const u2 = p2s.x, v2 = p2s.y;
+    const x0 = p0d.x, y0 = p0d.y;
+    const x1 = p1d.x, y1 = p1d.y;
+    const x2 = p2d.x, y2 = p2d.y;
+
+    const det = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
     if (Math.abs(det) < 1e-6) {
       ctx.restore();
+      skipCount++;
       continue;
     }
+    drawnCount++;
 
-    const inv00 = (p1s.y - p2s.y) / det;
-    const inv01 = (p2s.y - p0s.y) / det;
-    const inv02 = (p0s.y - p1s.y) / det;
-    const inv10 = (p2s.x - p1s.x) / det;
-    const inv11 = (p0s.x - p2s.x) / det;
-    const inv12 = (p1s.x - p0s.x) / det;
-    const inv20 = (p1s.x * p2s.y - p2s.x * p1s.y) / det;
-    const inv21 = (p2s.x * p0s.y - p0s.x * p2s.y) / det;
-    const inv22 = (p0s.x * p1s.y - p1s.x * p0s.y) / det;
+    const w00 = (v1 - v2) / det;
+    const w01 = (u2 - u1) / det;
+    const w02 = (u1 * v2 - u2 * v1) / det;
 
-    const a = p0d.x * inv00 + p1d.x * inv10 + p2d.x * inv20;
-    const b = p0d.y * inv00 + p1d.y * inv10 + p2d.y * inv20;
-    const c = p0d.x * inv01 + p1d.x * inv11 + p2d.x * inv21;
-    const d = p0d.y * inv01 + p1d.y * inv11 + p2d.y * inv21;
-    const e = p0d.x * inv02 + p1d.x * inv12 + p2d.x * inv22;
-    const f = p0d.y * inv02 + p1d.y * inv12 + p2d.y * inv22;
+    const w10 = (v2 - v0) / det;
+    const w11 = (u0 - u2) / det;
+    const w12 = (u2 * v0 - u0 * v2) / det;
+
+    const w20 = (v0 - v1) / det;
+    const w21 = (u1 - u0) / det;
+    const w22 = (u0 * v1 - u1 * v0) / det;
+
+    const a = x0 * w00 + x1 * w10 + x2 * w20;
+    const c = x0 * w01 + x1 * w11 + x2 * w21;
+    const e = x0 * w02 + x1 * w12 + x2 * w22;
+
+    const b = y0 * w00 + y1 * w10 + y2 * w20;
+    const d = y0 * w01 + y1 * w11 + y2 * w21;
+    const f = y0 * w02 + y1 * w12 + y2 * w22;
 
     ctx.transform(a, b, c, d, e, f);
     ctx.drawImage(srcCanvas, 0, 0);
     ctx.restore();
   }
+  console.log(`[FaceMix warp] 描画: ${drawnCount}, スキップ: ${skipCount}`);
   return canvas;
 }
 
@@ -317,6 +333,7 @@ async function runFaceMix() {
     const points = avgLandmarks.map(p => [p.x, p.y]);
     const delaunay = Delaunator.from(points);
     const triangles = delaunay.triangles;
+    console.log(`[FaceMix] ランドマーク数: ${avgLandmarks.length}, 三角形数: ${triangles.length / 3}`);
 
     setStatus('各画像を平均形状へワープ変形中...');
     const warpedCanvases = [];
@@ -362,7 +379,7 @@ async function runFaceMix() {
     setStatus('合成が完了しました！');
     resultSection.scrollIntoView({ behavior: 'smooth' });
   } catch (err) {
-    console.error(err);
+    console.warn('[FaceMix]', err.message);
     setError(err.message || '合成処理中にエラーが発生しました。');
     setStatus('');
   } finally {
