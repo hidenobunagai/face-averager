@@ -9,6 +9,7 @@ const slots = [
 ];
 
 let landmarkerInstance = null;
+let landmarkerDelegate = null;
 
 // DOM要素
 const mixButton = document.getElementById('mix-button');
@@ -45,30 +46,58 @@ function updateMixButtonState() {
   mixButton.disabled = !allLoaded;
 }
 
-// MediaPipe FaceLandmarker の遅延初期化
-async function getLandmarker() {
-  if (landmarkerInstance) return landmarkerInstance;
-  setStatus('顔認識AIモデル（MediaPipe）を読み込み中...');
+// 顔検出の閾値を既定(0.5)から緩める。古い写真ではスコアが閾値付近で跨ぎ、
+// デリゲート(CPU/GPU)や端末の数値微差で「検出0件」になることが実測で発生したため。
+const LANDMARKER_OPTIONS = {
+  runningMode: 'IMAGE',
+  numFaces: 1,
+  minFaceDetectionConfidence: 0.3,
+  minFacePresenceConfidence: 0.3
+};
+
+async function createLandmarker(delegate) {
   const vision = await FilesetResolver.forVisionTasks(
     'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
   );
   const modelAssetPath = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  return FaceLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath, delegate },
+    ...LANDMARKER_OPTIONS
+  });
+}
 
+// MediaPipe FaceLandmarker の遅延初期化（GPU優先、初期化失敗時はCPU）
+async function getLandmarker() {
+  if (landmarkerInstance) return landmarkerInstance;
+  setStatus('顔認識AIモデル（MediaPipe）を読み込み中...');
   try {
-    landmarkerInstance = await FaceLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath, delegate: 'GPU' },
-      runningMode: 'IMAGE',
-      numFaces: 1
-    });
+    landmarkerInstance = await createLandmarker('GPU');
+    landmarkerDelegate = 'GPU';
   } catch (err) {
-    console.warn('GPU初期化に失敗したためCPUで再試行します:', err);
-    landmarkerInstance = await FaceLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath, delegate: 'CPU' },
-      runningMode: 'IMAGE',
-      numFaces: 1
-    });
+    console.warn('[FaceMix] GPU初期化に失敗したためCPUで再試行します:', err);
+    landmarkerInstance = await createLandmarker('CPU');
+    landmarkerDelegate = 'CPU';
   }
   return landmarkerInstance;
+}
+
+// 顔検出。GPUでは空/例外が返る端末があるため、失敗時はCPUに切り替えて再試行する
+async function detectFace(canvas) {
+  let detection = null;
+  try {
+    detection = landmarkerInstance.detect(canvas);
+  } catch (err) {
+    console.warn('[FaceMix] 検出で例外:', err);
+  }
+  const found = detection && detection.faceLandmarks && detection.faceLandmarks.length > 0;
+  if (!found && landmarkerDelegate === 'GPU') {
+    console.warn('[FaceMix] GPUで顔検出に失敗。CPUに切り替えて再試行します');
+    try { landmarkerInstance.close(); } catch (_) { /* 前回分の後始末は失敗しても無視 */ }
+    landmarkerInstance = await createLandmarker('CPU');
+    landmarkerDelegate = 'CPU';
+    detection = landmarkerInstance.detect(canvas);
+  }
+  return detection;
 }
 
 // スロットに画像を設定
@@ -299,7 +328,7 @@ async function runFaceMix() {
   mixButton.disabled = true;
 
   try {
-    const landmarker = await getLandmarker();
+    await getLandmarker();
 
     setStatus('作業解像度にリサイズ中...');
     const workCanvases = slots.map(s => createWorkCanvas(s.img));
@@ -308,8 +337,8 @@ async function runFaceMix() {
     const allLandmarks = [];
     for (let i = 0; i < 3; i++) {
       setStatus(`画像 ${i + 1} の顔とランドマークを検出中...`);
-      const detection = landmarker.detect(workCanvases[i]);
-      if (!detection.faceLandmarks || detection.faceLandmarks.length === 0) {
+      const detection = await detectFace(workCanvases[i]);
+      if (!detection || !detection.faceLandmarks || detection.faceLandmarks.length === 0) {
         throw new Error(`画像 ${i + 1} から顔を検出できませんでした。正面を向いた鮮明な顔写真を選択してください。`);
       }
       // 478ランドマークをピクセル座標系に変換
