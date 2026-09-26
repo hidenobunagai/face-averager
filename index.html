@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceMix - 3人の顔写真合成ツール</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14",
+      "delaunator": "https://cdn.jsdelivr.net/npm/delaunator@5.0.1/+esm"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>FaceMix</h1>
+      <p class="subtitle">3人の顔写真から平均形状を計算し、ワープとブレンドによって自然にモーフィング合成します。</p>
+      <div class="privacy-badge">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <span>画像はサーバーに送信されず、すべてブラウザ内で安全に処理されます</span>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- サンプル選択クイックバー -->
+      <section class="quick-samples" aria-label="クイックサンプル">
+        <span class="quick-samples-label">テスト用サンプル:</span>
+        <button type="button" id="load-samples-btn" class="sample-btn">サンプル顔写真をセット（3人）</button>
+        <button type="button" id="load-error-sample-btn" class="sample-btn error-test-btn">エラー確認用（顔なし画像を含む）</button>
+      </section>
+
+      <!-- 3枚の画像アップロード領域 -->
+      <section class="upload-section" aria-label="顔画像アップロード">
+        <div class="image-slots-grid">
+          <!-- スロット 1 -->
+          <div class="image-slot" data-slot="1">
+            <div class="slot-header">
+              <label for="file-input-1" class="slot-label">画像 1</label>
+              <span class="slot-status" id="slot-status-1">未選択</span>
+            </div>
+            <div class="preview-card" id="drop-zone-1">
+              <input type="file" id="file-input-1" class="file-input" accept="image/*" aria-describedby="slot-status-1">
+              <div class="preview-content" id="preview-content-1">
+                <svg class="upload-icon" aria-hidden="true" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span class="upload-hint">クリックして選択<br>またはドラッグ＆ドロップ</span>
+              </div>
+              <img id="preview-img-1" class="preview-img" alt="画像1のプレビュー" hidden>
+            </div>
+          </div>
+
+          <!-- スロット 2 -->
+          <div class="image-slot" data-slot="2">
+            <div class="slot-header">
+              <label for="file-input-2" class="slot-label">画像 2</label>
+              <span class="slot-status" id="slot-status-2">未選択</span>
+            </div>
+            <div class="preview-card" id="drop-zone-2">
+              <input type="file" id="file-input-2" class="file-input" accept="image/*" aria-describedby="slot-status-2">
+              <div class="preview-content" id="preview-content-2">
+                <svg class="upload-icon" aria-hidden="true" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span class="upload-hint">クリックして選択<br>またはドラッグ＆ドロップ</span>
+              </div>
+              <img id="preview-img-2" class="preview-img" alt="画像2のプレビュー" hidden>
+            </div>
+          </div>
+
+          <!-- スロット 3 -->
+          <div class="image-slot" data-slot="3">
+            <div class="slot-header">
+              <label for="file-input-3" class="slot-label">画像 3</label>
+              <span class="slot-status" id="slot-status-3">未選択</span>
+            </div>
+            <div class="preview-card" id="drop-zone-3">
+              <input type="file" id="file-input-3" class="file-input" accept="image/*" aria-describedby="slot-status-3">
+              <div class="preview-content" id="preview-content-3">
+                <svg class="upload-icon" aria-hidden="true" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span class="upload-hint">クリックして選択<br>またはドラッグ＆ドロップ</span>
+              </div>
+              <img id="preview-img-3" class="preview-img" alt="画像3のプレビュー" hidden>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 操作ボタンとメッセージ領域 -->
+      <section class="action-section">
+        <button type="button" id="mix-button" class="primary-button" disabled>3人の顔を合成する</button>
+        <div id="status-message" class="status-box" role="status" aria-live="polite" hidden></div>
+        <div id="error-message" class="error-box" role="alert" aria-live="assertive" hidden></div>
+      </section>
+
+      <!-- 合成結果領域 -->
+      <section class="result-section" id="result-section" aria-label="合成結果" hidden>
+        <div class="result-card">
+          <h2 class="result-title">合成結果</h2>
+          <div class="canvas-wrapper">
+            <canvas id="result-canvas" width="1024" height="1024" aria-label="3人の顔写真を合成した画像"></canvas>
+          </div>
+          <div class="result-actions">
+            <button type="button" id="download-button" class="download-button">PNGをダウンロード</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>FaceMix &mdash; ブラウザ完結型クライアントサイド顔合成スパイク</p>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
