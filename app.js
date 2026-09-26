@@ -194,7 +194,7 @@ function warpImage(srcCanvas, srcLandmarks, dstLandmarks, triangles) {
     const p0s = srcLandmarks[i0], p1s = srcLandmarks[i1], p2s = srcLandmarks[i2];
     const p0d = dstLandmarks[i0], p1d = dstLandmarks[i1], p2d = dstLandmarks[i2];
 
-    // 重心から0.6px外側に拡張して三角形同士の隙間を防止
+    // 重心から1.2px外側に拡張して三角形同士のシーム（アンチエイリアスの隙間）を防止
     const cx = (p0d.x + p1d.x + p2d.x) / 3;
     const cy = (p0d.y + p1d.y + p2d.y) / 3;
     const expand = (p) => {
@@ -202,7 +202,7 @@ function warpImage(srcCanvas, srcLandmarks, dstLandmarks, triangles) {
       const dy = p.y - cy;
       const dist = Math.hypot(dx, dy);
       if (dist === 0) return { x: p.x, y: p.y };
-      const f = (dist + 0.6) / dist;
+      const f = (dist + 1.2) / dist;
       return { x: cx + dx * f, y: cy + dy * f };
     };
     const ep0 = expand(p0d), ep1 = expand(p1d), ep2 = expand(p2d);
@@ -372,12 +372,33 @@ async function runFaceMix() {
       }
     }
 
-    rCtx.putImageData(outImgData, 0, 0);
+    // 合成結果を一時キャンバスに書き出し
+    const fullCanvas = document.createElement('canvas');
+    fullCanvas.width = WORK_SIZE;
+    fullCanvas.height = WORK_SIZE;
+    fullCanvas.getContext('2d').putImageData(outImgData, 0, 0);
+
+    // 顔のバウンディングボックス＋余白で切り抜いて表示（透明背景に顔が浮く仮面感を回避）
+    let minX = WORK_SIZE, minY = WORK_SIZE, maxX = 0, maxY = 0;
+    for (const p of avgLandmarks) {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    }
+    const padX = (maxX - minX) * 0.15;
+    const padY = (maxY - minY) * 0.15;
+    const bx = Math.max(0, Math.floor(minX - padX));
+    const by = Math.max(0, Math.floor(minY - padY));
+    const bw = Math.min(WORK_SIZE - bx, Math.ceil(maxX + padX) - bx);
+    const bh = Math.min(WORK_SIZE - by, Math.ceil(maxY + padY) - by);
+    resultCanvas.width = bw;
+    resultCanvas.height = bh;
+    resultCanvas.getContext('2d').drawImage(fullCanvas, bx, by, bw, bh, 0, 0, bw, bh);
 
     resultSection.hidden = false;
     downloadButton.disabled = false;
     setStatus('合成が完了しました！');
     resultSection.scrollIntoView({ behavior: 'smooth' });
+    downloadButton.focus({ preventScroll: true });
   } catch (err) {
     console.warn('[FaceMix]', err.message);
     setError(err.message || '合成処理中にエラーが発生しました。');

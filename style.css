@@ -140,7 +140,8 @@ body {
 }
 
 .slot-status {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
@@ -149,7 +150,8 @@ body {
   width: 100%;
   aspect-ratio: 1 / 1;
   background: #f1f5f9;
-  border: 2px dashed var(--border-color);
+  /* WCAG 1.4.11: 操作領域を識別する枠は非テキスト 3:1 以上（#64748b は背景比 約4.3:1） */
+  border: 2px dashed #64748b;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
