@@ -29,12 +29,16 @@ python3 -m http.server 8099
 ## AI仕上げ（任意・ユーザー持ち込みAPIキー）
 
 - 合成結果を Gemini の画像編集モデル（既定 `gemini-3.1-flash-image`）に渡し、
-  **顔の特徴は変えずに**髪型・背景を自然に補完した1枚を受け取る
+  顔の特徴を保持したまま髪・背景を補完した1枚を受け取る
+- **同一性保持の工夫（A/B 測定済み）**: プロンプトで「目鼻口・骨格・肌色・向き・表情を変更禁止」と
+  明示し、入力を白地に展開したうえで**2倍解像度**で送る（現行プロンプト＋原寸では別人化 2/5、
+  ロック＋2倍で 5/5。元写真3枚を参照に付けると逆に暴走するので使わない）
 - APIキーはユーザーが [Google AI Studio](https://aistudio.google.com/apikey) で自分で発行し、
   **自分の端末の localStorage にのみ保存**（アプリ運営者はキーを持たない・課金もユーザー自身の枠）
 - 送信先は Google の Gemini API のみ。通常合成は従来どおり完全ローカル
 - モデルは設定から切替可能（`gemini-3.1-flash-image` / `gemini-2.5-flash-image`（無料枠あり） / `gemini-3-pro-image`）
 - テスト: `GEMINI_KEY_FOR_TEST=<key> bun run scratch/verify-ai.ts`
+- A/B 比較: `GEMINI_KEY_FOR_TEST=<key> bun run scratch/ab-ai.ts` → `/scratch/ab/`
 
 ## デプロイ（Cloudflare Worker 静的アセット）
 

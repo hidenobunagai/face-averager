@@ -502,10 +502,14 @@ loadErrorSampleBtn.addEventListener('click', () => {
 const GEMINI_MODEL_DEFAULT = 'gemini-3.1-flash-image';
 const GEMINI_KEY_STORAGE = 'facemix.gemini.key';
 const GEMINI_MODEL_STORAGE = 'facemix.gemini.model';
+// プロンプトは A/B 測定で選定: 同一性ロック付きが別人化を抑え、入力2倍解像度と合わせて
+// 合成元との同一性が最も高かった（視覚判定 5/5。現行プロンプトは 2/5 で別人化）。
 const AI_FINISH_PROMPT =
-  'この画像は3人の顔を機械的に平均して合成したものです。顔の特徴・表情・向き・肌の色合いは変えずに、' +
-  '自然な1枚の肖像写真へ仕上げてください。髪型と背景はこの顔に似合う自然なものを補完してください。' +
-  '合成由来の歪みやゴーストがあれば解消してください。';
+  'この画像は3人の顔を機械的に平均して合成した画像です。あなたの仕事は、入力画像に写っている人物そのものを、' +
+  '自然な1枚の肖像写真に仕上げることです。厳守事項: 目・鼻・口・眉の形、顔の骨格と輪郭、肌の色合い、' +
+  '視線・向き・表情は入力画像から一切変更しないこと。別の顔を作ったり、元の3人のいずれかに寄せたりしないこと。' +
+  '補完してよいのは、顔の外側の髪・首・衣服・背景・照明、および合成由来のごく軽微な歪みの自然化のみ。' +
+  '出力は縦長の自然なポートレート1枚。';
 
 const aiSettings = document.getElementById('ai-settings');
 const geminiKeyInput = document.getElementById('gemini-key-input');
@@ -541,15 +545,19 @@ geminiModelSelect.addEventListener('change', () => {
   localStorage.setItem(GEMINI_MODEL_STORAGE, geminiModelSelect.value);
 });
 
-// 結果キャンバスを白背景に展開して base64 PNG を返す（透過PNGのまま送ると Gemini が黒抜きで解釈するため）
+// 結果キャンバスを白背景に展開し2倍解像度にして base64 PNG を返す。
+// 透明PNGのまま送ると Gemini が黒抜きで解釈するため白地に敷く。
+// 入力を2倍にするのは A/B 測定で同一性保持が大幅に向上したため（小さい入力だと顔を作り直して別人になる）。
 function flattenResultToBase64(canvas) {
   const c = document.createElement('canvas');
-  c.width = canvas.width;
-  c.height = canvas.height;
+  c.width = canvas.width * 2;
+  c.height = canvas.height * 2;
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, c.width, c.height);
-  ctx.drawImage(canvas, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, c.width, c.height);
   return c.toDataURL('image/png').split(',')[1];
 }
 
