@@ -425,6 +425,8 @@ async function runFaceMix() {
 
     resultSection.hidden = false;
     downloadButton.disabled = false;
+    aiFinishBtn.hidden = false;
+    aiResult.hidden = true;
     setStatus('合成が完了しました！');
     resultSection.scrollIntoView({ behavior: 'smooth' });
     downloadButton.focus({ preventScroll: true });
@@ -493,4 +495,143 @@ loadErrorSampleBtn.addEventListener('click', () => {
     'samples/noface_landscape.jpg',
     'samples/face3_curie.jpg'
   ]);
+});
+
+// ===== AI仕上げ（Gemini API・ユーザー持ち込みキー） =====
+// 通常の合成は完全にブラウザ内で完結。この機能を使う時だけ Google に送信される。
+const GEMINI_MODEL_DEFAULT = 'gemini-3.1-flash-image';
+const GEMINI_KEY_STORAGE = 'facemix.gemini.key';
+const GEMINI_MODEL_STORAGE = 'facemix.gemini.model';
+const AI_FINISH_PROMPT =
+  'この画像は3人の顔を機械的に平均して合成したものです。顔の特徴・表情・向き・肌の色合いは変えずに、' +
+  '自然な1枚の肖像写真へ仕上げてください。髪型と背景はこの顔に似合う自然なものを補完してください。' +
+  '合成由来の歪みやゴーストがあれば解消してください。';
+
+const aiSettings = document.getElementById('ai-settings');
+const geminiKeyInput = document.getElementById('gemini-key-input');
+const geminiModelSelect = document.getElementById('gemini-model-select');
+const saveKeyBtn = document.getElementById('save-key-btn');
+const clearKeyBtn = document.getElementById('clear-key-btn');
+const keyStatus = document.getElementById('key-status');
+const aiFinishBtn = document.getElementById('ai-finish-button');
+const aiResult = document.getElementById('ai-result');
+const aiResultImg = document.getElementById('ai-result-img');
+const aiDownloadBtn = document.getElementById('ai-download-button');
+
+function getGeminiKey() {
+  return (localStorage.getItem(GEMINI_KEY_STORAGE) || '').trim();
+}
+function getGeminiModel() {
+  return localStorage.getItem(GEMINI_MODEL_STORAGE) || GEMINI_MODEL_DEFAULT;
+}
+
+geminiKeyInput.value = getGeminiKey();
+geminiModelSelect.value = getGeminiModel();
+
+saveKeyBtn.addEventListener('click', () => {
+  localStorage.setItem(GEMINI_KEY_STORAGE, geminiKeyInput.value.trim());
+  keyStatus.textContent = '保存しました（この端末のみ）';
+});
+clearKeyBtn.addEventListener('click', () => {
+  localStorage.removeItem(GEMINI_KEY_STORAGE);
+  geminiKeyInput.value = '';
+  keyStatus.textContent = '削除しました';
+});
+geminiModelSelect.addEventListener('change', () => {
+  localStorage.setItem(GEMINI_MODEL_STORAGE, geminiModelSelect.value);
+});
+
+// 結果キャンバスを白背景に展開して base64 PNG を返す（透過PNGのまま送ると Gemini が黒抜きで解釈するため）
+function flattenResultToBase64(canvas) {
+  const c = document.createElement('canvas');
+  c.width = canvas.width;
+  c.height = canvas.height;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(canvas, 0, 0);
+  return c.toDataURL('image/png').split(',')[1];
+}
+
+function geminiErrorMessage(status, body) {
+  if (status === 400 && body.includes('API key not valid')) {
+    return 'APIキーが無効です。設定欄のキーを確認してください。';
+  }
+  if (status === 403) {
+    return 'このモデルをそのAPIキーでは使えない可能性があります。設定からモデル（例: gemini-2.5-flash-image）を変えて試してください。';
+  }
+  if (status === 429) {
+    return 'レート制限または無料枠の上限に達しました。少し待ってから再試行するか、モデルを変えて試してください。';
+  }
+  return `AI仕上げに失敗しました（HTTP ${status}）。しばらくして再試行してください。`;
+}
+
+async function callGeminiImage(key, model, imageBase64) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: AI_FINISH_PROMPT },
+            { inline_data: { mime_type: 'image/png', data: imageBase64 } }
+          ]
+        }]
+      })
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(geminiErrorMessage(res.status, body));
+  }
+  const data = await res.json();
+  const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+  const imgPart = parts.find(p => p.inlineData || p.inline_data);
+  const inline = imgPart && (imgPart.inlineData || imgPart.inline_data);
+  if (!inline || !inline.data) {
+    throw new Error('AIから画像が返されませんでした。少し待ってから再試行してください。');
+  }
+  return `data:${inline.mimeType || inline.mime_type || 'image/jpeg'};base64,${inline.data}`;
+}
+
+aiFinishBtn.addEventListener('click', async () => {
+  const key = getGeminiKey();
+  if (!key) {
+    setError('AI仕上げには Gemini APIキーが必要です。下の「✨ AI仕上げの設定」から入力して「保存」してください。');
+    aiSettings.open = true;
+    aiSettings.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    geminiKeyInput.focus();
+    return;
+  }
+  setError('');
+  aiFinishBtn.disabled = true;
+  const label = aiFinishBtn.textContent;
+  aiFinishBtn.textContent = '✨ AIで仕上げ中...（10〜30秒）';
+  setStatus('Gemini API に送信して仕上げています...');
+  try {
+    const imageBase64 = flattenResultToBase64(resultCanvas);
+    const dataUrl = await callGeminiImage(key, getGeminiModel(), imageBase64);
+    aiResultImg.src = dataUrl;
+    aiResult.hidden = false;
+    setStatus('AI仕上げが完了しました！');
+    aiResult.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    console.warn('[FaceMix AI]', err.message);
+    setError(err.message);
+    setStatus('');
+  } finally {
+    aiFinishBtn.disabled = false;
+    aiFinishBtn.textContent = label;
+  }
+});
+
+aiDownloadBtn.addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = aiResultImg.src;
+  a.download = `facemix-ai-${Date.now()}.jpg`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 });

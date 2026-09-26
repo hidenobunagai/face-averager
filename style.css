@@ -329,3 +329,114 @@ button:focus-visible, input:focus-visible, .file-input:focus-visible + .preview-
     scroll-behavior: auto !important;
   }
 }
+
+/* AI仕上げ */
+.ai-button {
+  background-color: #7c3aed;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ai-button:hover:not(:disabled) {
+  background-color: #6d28d9;
+}
+
+.ai-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.ai-result {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.ai-result-title {
+  font-size: 1.05rem;
+  margin-bottom: 10px;
+}
+
+.ai-result img {
+  max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin-bottom: 12px;
+}
+
+/* AI仕上げの設定パネル */
+.settings-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+
+.settings-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.key-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.key-row input[type="password"] {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.key-row select {
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: var(--card-bg);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.settings-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.key-status {
+  font-size: 0.8rem;
+  color: var(--accent-green);
+}
