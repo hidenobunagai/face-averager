@@ -1,6 +1,7 @@
 {
   "name": "face-mix",
   "compatibility_date": "2026-09-26",
+  "routes": [{ "pattern": "facemix.misato-labs.com", "custom_domain": true }],
   "assets": {
     "directory": "."
   }
