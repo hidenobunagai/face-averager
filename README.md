@@ -3,7 +3,7 @@
 3枚の顔写真をブラウザ内でモーフィング合成する静的 Web アプリ。
 **通常の合成は全処理がクライアント側**で行われ、顔写真がサーバーに送信されることは一切ありません。
 
-- 公開: https://face-averager.misato-labs.com （旧 https://facemix.misato-labs.com も有効）
+- 公開: https://face-averager.misato-labs.com
 - 任意機能の **AI仕上げ**（髪・背景の補完）だけは、ユーザー自身の Gemini APIキーで Google に送信（後述）
 
 ## 実行
