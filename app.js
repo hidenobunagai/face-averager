@@ -74,7 +74,7 @@ async function getLandmarker() {
     landmarkerInstance = await createLandmarker('GPU');
     landmarkerDelegate = 'GPU';
   } catch (err) {
-    console.warn('[FaceMix] GPU初期化に失敗したためCPUで再試行します:', err);
+    console.warn('[FaceAverager] GPU初期化に失敗したためCPUで再試行します:', err);
     landmarkerInstance = await createLandmarker('CPU');
     landmarkerDelegate = 'CPU';
   }
@@ -87,11 +87,11 @@ async function detectFace(canvas) {
   try {
     detection = landmarkerInstance.detect(canvas);
   } catch (err) {
-    console.warn('[FaceMix] 検出で例外:', err);
+    console.warn('[FaceAverager] 検出で例外:', err);
   }
   const found = detection && detection.faceLandmarks && detection.faceLandmarks.length > 0;
   if (!found && landmarkerDelegate === 'GPU') {
-    console.warn('[FaceMix] GPUで顔検出に失敗。CPUに切り替えて再試行します');
+    console.warn('[FaceAverager] GPUで顔検出に失敗。CPUに切り替えて再試行します');
     try { landmarkerInstance.close(); } catch (_) { /* 前回分の後始末は失敗しても無視 */ }
     landmarkerInstance = await createLandmarker('CPU');
     landmarkerDelegate = 'CPU';
@@ -284,7 +284,7 @@ function warpImage(srcCanvas, srcLandmarks, dstLandmarks, triangles) {
     ctx.drawImage(srcCanvas, 0, 0);
     ctx.restore();
   }
-  console.log(`[FaceMix warp] 描画: ${drawnCount}, スキップ: ${skipCount}`);
+  console.log(`[FaceAverager warp] 描画: ${drawnCount}, スキップ: ${skipCount}`);
   return canvas;
 }
 
@@ -323,7 +323,7 @@ function createFeatheredMask(avgLandmarks) {
 }
 
 // メイン合成処理
-async function runFaceMix() {
+async function runFaceAverager() {
   setError('');
   mixButton.disabled = true;
 
@@ -362,7 +362,7 @@ async function runFaceMix() {
     const points = avgLandmarks.map(p => [p.x, p.y]);
     const delaunay = Delaunator.from(points);
     const triangles = delaunay.triangles;
-    console.log(`[FaceMix] ランドマーク数: ${avgLandmarks.length}, 三角形数: ${triangles.length / 3}`);
+    console.log(`[FaceAverager] ランドマーク数: ${avgLandmarks.length}, 三角形数: ${triangles.length / 3}`);
 
     setStatus('各画像を平均形状へワープ変形中...');
     const warpedCanvases = [];
@@ -431,7 +431,7 @@ async function runFaceMix() {
     resultSection.scrollIntoView({ behavior: 'smooth' });
     downloadButton.focus({ preventScroll: true });
   } catch (err) {
-    console.warn('[FaceMix]', err.message);
+    console.warn('[FaceAverager]', err.message);
     setError(err.message || '合成処理中にエラーが発生しました。');
     setStatus('');
   } finally {
@@ -439,7 +439,7 @@ async function runFaceMix() {
   }
 }
 
-mixButton.addEventListener('click', runFaceMix);
+mixButton.addEventListener('click', runFaceAverager);
 
 // PNGダウンロード
 downloadButton.addEventListener('click', () => {
@@ -448,7 +448,7 @@ downloadButton.addEventListener('click', () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facemix-${Date.now()}.png`;
+    a.download = `faceaverager-${Date.now()}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -577,7 +577,7 @@ function geminiErrorMessage(status, body) {
   } catch (_) {
     apiMsg = firstLine(body, 200);
   }
-  console.warn('[FaceMix AI] Gemini API error:', status, apiMsg, reasons);
+  console.warn('[FaceAverager AI] Gemini API error:', status, apiMsg, reasons);
 
   if (status === 400 && /API key not valid|API_KEY_INVALID/i.test(apiMsg)) {
     return 'APIキーが無効です。設定欄のキーを確認してください。';
@@ -588,7 +588,7 @@ function geminiErrorMessage(status, body) {
         + `（Google: ${firstLine(apiMsg)}）`;
     }
     if (/REFERRER|referrer/i.test(apiMsg + reasons)) {
-      return 'APIキーにリファラ制限が付いています。設定を解除するか facemix.misato-labs.com を許可してください。'
+      return 'APIキーにリファラ制限が付いています。設定を解除するか face-averager.misato-labs.com を許可してください。'
         + `（Google: ${firstLine(apiMsg)}）`;
     }
     if (/free tier|tier/i.test(apiMsg)) {
@@ -661,7 +661,7 @@ aiFinishBtn.addEventListener('click', async () => {
     setStatus('AI仕上げが完了しました！');
     aiResult.scrollIntoView({ behavior: 'smooth' });
   } catch (err) {
-    console.warn('[FaceMix AI]', err.message);
+    console.warn('[FaceAverager AI]', err.message);
     setError(err.message);
     setStatus('');
   } finally {
@@ -673,7 +673,7 @@ aiFinishBtn.addEventListener('click', async () => {
 aiDownloadBtn.addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = aiResultImg.src;
-  a.download = `facemix-ai-${Date.now()}.jpg`;
+  a.download = `faceaverager-ai-${Date.now()}.jpg`;
   document.body.appendChild(a);
   a.click();
   a.remove();
